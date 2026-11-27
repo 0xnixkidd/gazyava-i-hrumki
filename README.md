@@ -16,6 +16,6 @@
 - **Android** — установите [APK](Android/Gazyava-i-Hrumki.apk).
 - **Windows** — запустите `Gazyava-i-Hrumki.exe` из папки своей архитектуры в [Windows](Windows/).
 - **Linux** и **macOS** — выберите архив под свой процессор. Порядок запуска указан в [README для Linux](Linux/README.txt) и [README для macOS](macOS/README.txt).
-- **iOS** — откройте [iOS/index.html](iOS/index.html) в браузере с WebGL.
+- **Браузер** — откройте [iOS/index.html](iOS/index.html) в браузере с WebGL.
 
 [Инструкции по пересборке и контрольные суммы](README-BUILDS.txt)
