@@ -1,0 +1,21 @@
+{
+  "name": "gazyava-i-hrumki",
+  "version": "1.1.0",
+  "description": "Gazyava i Hrumki",
+  "main": "main.js",
+  "author": "kabil",
+  "scripts": {
+    "dist": "electron-builder --win portable --publish never"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.kabil.gazyava",
+    "productName": "Gazyava i Hrumki",
+    "files": ["main.js", "game/**/*"],
+    "win": { "target": "portable" },
+    "portable": { "artifactName": "Gazyava-i-Hrumki.exe" }
+  }
+}

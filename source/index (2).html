@@ -1,0 +1,1433 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Газява">
+<meta name="theme-color" content="#2b1b4a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<title>Газява и Хрумки</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600&family=Russo+One&display=swap">
+<style>
+/* Layout: one full-screen 3D arena (a tiled kiosk floor), HUD pills on top, floating joystick on the left thumb, card overlay for menu and results. */
+:root {
+  --ink: #2b1b4a;
+  --paper: #fff4e0;
+  --soda: #1fb6ff;
+  --chip: #ffb703;
+  --hot: #ff3d5a;
+  --mint: #8fd3c8;
+  --font-display: "Russo One", "Arial Black", Impact, sans-serif;
+  --font-body: "Rubik", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: dark;
+}
+html { box-sizing: border-box; height: 100%; }
+[hidden] { display: none !important; }
+*, *::before, *::after { box-sizing: inherit; }
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-body);
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+#game { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--ink); }
+canvas { display: block; width: 100%; height: 100%; }
+
+.hud { position: absolute; left: 0; right: 0; top: 0; display: flex; gap: 8px; align-items: flex-start; padding: 10px max(12px, env(safe-area-inset-left, 0px)) 0 max(12px, env(safe-area-inset-right, 0px)); pointer-events: none; }
+.pill { display: flex; flex-direction: column; min-width: 78px; padding: 6px 12px 7px; border-radius: 14px; background: rgba(43, 27, 74, 0.86); color: var(--paper); line-height: 1.05; }
+.pill .lbl { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.75; }
+.pill b { font-family: var(--font-display); font-weight: 400; font-size: 26px; font-variant-numeric: tabular-nums; }
+.pill.time { margin-left: auto; }
+.pill.low { background: var(--hot); animation: pulse 0.5s ease-in-out infinite alternate; }
+@keyframes pulse { from { transform: scale(1); } to { transform: scale(1.07); } }
+.btn-sm { pointer-events: auto; align-self: stretch; border: 0; border-radius: 14px; padding: 0 12px; min-width: 64px; font: 600 12px var(--font-body); color: var(--paper); background: rgba(43, 27, 74, 0.86); cursor: pointer; }
+.btn-sm:focus-visible, .go:focus-visible { outline: 3px solid var(--chip); outline-offset: 2px; }
+
+.tally { position: absolute; left: max(12px, env(safe-area-inset-left, 0px)); top: 74px; font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: rgba(43, 27, 74, 0.7); pointer-events: none; font-variant-numeric: tabular-nums; }
+.tally .s { color: var(--soda); }
+.tally .c { color: var(--chip); }
+
+.combo { position: absolute; left: 50%; top: 74px; transform: translateX(-50%); min-width: 150px; text-align: center; pointer-events: none; }
+.combo span { display: block; font-family: var(--font-display); font-size: 22px; color: var(--chip); text-shadow: 0 2px 0 var(--ink), 0 0 12px rgba(43, 27, 74, 0.6); }
+.combo i { display: block; height: 6px; margin-top: 4px; border-radius: 3px; background: rgba(43, 27, 74, 0.6); overflow: hidden; }
+.combo u { display: block; height: 100%; width: 100%; background: var(--chip); text-decoration: none; }
+
+.stick { position: absolute; width: calc(112px * var(--ss, 1)); height: calc(112px * var(--ss, 1)); margin: calc(-56px * var(--ss, 1)) 0 0 calc(-56px * var(--ss, 1)); border-radius: 50%; border: 3px solid var(--paper); background: rgba(43, 27, 74, 0.28); opacity: 0.35; pointer-events: none; transition: opacity 0.15s; }
+.stick.on { opacity: 0.8; }
+.knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: var(--paper); box-shadow: 0 3px 0 rgba(43, 27, 74, 0.5); }
+
+.pop { position: absolute; transform: translate(-50%, -50%); font-family: var(--font-display); font-size: 26px; pointer-events: none; text-shadow: 0 2px 0 var(--ink), 0 0 8px var(--ink); animation: pop 0.9s ease-out forwards; }
+@keyframes pop {
+  0% { opacity: 0; transform: translate(-50%, -30%) scale(0.6); }
+  20% { opacity: 1; transform: translate(-50%, -70%) scale(1.15); }
+  100% { opacity: 0; transform: translate(-50%, -190%) scale(1); }
+}
+
+.ov { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px max(16px, env(safe-area-inset-left, 0px)); background: rgba(43, 27, 74, 0.55); animation: fade 0.3s ease-out; overflow-y: auto; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.card { width: 100%; max-width: 380px; margin: auto; padding: 22px 20px 20px; border-radius: 22px; background: var(--paper); color: var(--ink); box-shadow: 0 10px 0 rgba(43, 27, 74, 0.35); }
+.eyebrow { margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--hot); }
+.card h1 { margin: 0 0 12px; font-family: var(--font-display); font-weight: 400; font-size: 44px; line-height: 0.98; color: var(--ink); text-wrap: balance; }
+.card h1 em { font-style: normal; color: var(--soda); text-shadow: 2px 2px 0 var(--ink); }
+.card h1 strong { font-weight: 400; color: var(--chip); text-shadow: 2px 2px 0 var(--ink); }
+.card p { margin: 0 0 12px; font-size: 15px; line-height: 1.45; }
+.how { margin: 0 0 16px; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 14px; font-weight: 600; }
+.how li { padding: 8px 12px; border-radius: 10px; background: #f0e3c8; }
+.how small { display: block; font-weight: 400; opacity: 0.75; }
+.big { font-family: var(--font-display); font-size: 64px; line-height: 1; margin: 4px 0 6px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.sub { font-size: 14px; font-weight: 600; margin: 0 0 4px; font-variant-numeric: tabular-nums; }
+.go { width: 100%; border: 0; border-radius: 16px; padding: 15px 16px; font-family: var(--font-display); font-size: 22px; color: var(--ink); background: var(--chip); box-shadow: 0 5px 0 #c98600; cursor: pointer; }
+.go:active { transform: translateY(3px); box-shadow: 0 2px 0 #c98600; }
+.err { padding: 24px; text-align: center; font-size: 16px; }
+.tally .m { color: #ffd84a; }
+.go.alt { margin-top: 10px; background: var(--mint); box-shadow: 0 5px 0 #4a9a8c; }
+.go.alt:active { box-shadow: 0 2px 0 #4a9a8c; }
+.go.ghost { margin-top: 12px; background: #f0e3c8; box-shadow: 0 5px 0 #cdbb98; font-size: 18px; padding: 12px 16px; }
+.ov.sheet { align-items: flex-end; padding: 0; background: transparent; overflow: hidden; }
+.ov.sheet .card { max-width: 520px; max-height: 62%; margin: 0 auto; border-radius: 22px 22px 0 0; overflow-y: auto; padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)); touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+.shophead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.shophead h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 26px; }
+.wallet { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; background: var(--ink); color: var(--paper); font-family: var(--font-display); font-size: 18px; font-variant-numeric: tabular-nums; }
+.coin { display: inline-block; width: 16px; height: 16px; border-radius: 50%; background: var(--chip); box-shadow: inset 0 0 0 3px #c98600; vertical-align: -2px; }
+.tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.tab { flex: 1; border: 0; border-radius: 12px; padding: 10px; font: 600 14px var(--font-body); color: var(--ink); background: #f0e3c8; cursor: pointer; }
+.tab.on { background: var(--ink); color: var(--paper); }
+.rows { display: grid; gap: 8px; }
+.row { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 14px; background: #f0e3c8; }
+.row[data-act] { cursor: pointer; }
+.row.sel { outline: 3px solid var(--soda); }
+.sw { flex: none; width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--ink); }
+.rinfo { flex: 1; min-width: 0; }
+.rname { font-weight: 600; font-size: 15px; }
+.rdesc { font-size: 12px; opacity: 0.8; }
+.rdesc .perk { color: #b4233c; font-weight: 600; opacity: 1; }
+.rbtn { flex: none; border: 0; border-radius: 12px; padding: 9px 12px; min-width: 84px; font: 600 13px var(--font-body); color: var(--ink); background: var(--chip); cursor: pointer; }
+.rbtn:disabled { background: #d6c9ad; color: #7a6c8f; cursor: default; }
+.rbtn.eq { background: var(--ink); color: var(--paper); }
+.pips { display: flex; gap: 3px; margin-top: 5px; }
+.pips i { width: 14px; height: 6px; border-radius: 3px; background: #d6c9ad; }
+.pips i.on { background: var(--soda); }
+.moto-btn { position: absolute; transform: translate(-50%, -50%) scale(var(--ms, 1)); left: 0; top: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 92px; padding: 10px 14px; border: 0; border-radius: 20px; font: 400 18px var(--font-display); color: var(--ink); background: var(--chip); box-shadow: 0 5px 0 #c98600; cursor: pointer; touch-action: manipulation; }
+.moto-btn b { font-weight: 400; }
+.moto-btn #motoC { display: inline-flex; align-items: center; gap: 4px; font: 600 14px var(--font-body); }
+.moto-btn:disabled { background: #d6c9ad; color: #7a6c8f; box-shadow: 0 5px 0 #a89b80; cursor: default; }
+.moto-btn.run { background: var(--hot); color: #fff; box-shadow: 0 5px 0 #a8203a; }
+.moto-btn:active:not(:disabled) { transform: translate(-50%, calc(-50% + 3px)) scale(var(--ms, 1)); box-shadow: 0 2px 0 #c98600; }
+.moto-btn:focus-visible { outline: 3px solid var(--paper); outline-offset: 2px; }
+#motoKey { display: none; font: 600 11px var(--font-body); }
+@media (any-pointer: fine) { #motoBtn:not(:disabled) #motoKey { display: block; } }
+.tab:focus-visible, .rbtn:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .pill.low, .ov { animation: none; } }
+.srow { display: grid; gap: 8px; padding: 10px; border-radius: 14px; background: #f0e3c8; }
+.opts { display: flex; gap: 6px; }
+.opts .rbtn { flex: 1; min-width: 0; padding: 9px 4px; }
+.lay { position: absolute; inset: 0; background: rgba(43, 27, 74, 0.7); touch-action: none; }
+.lay .stick, .lay .moto-btn { pointer-events: auto; touch-action: none; cursor: grab; }
+.lay .stick { opacity: 0.95; }
+.lay .moto-btn .mc { display: inline-flex; align-items: center; gap: 4px; font: 600 14px var(--font-body); }
+.laytip { position: absolute; left: 0; right: 0; top: 14px; padding: 0 16px; text-align: center; font-weight: 600; font-size: 15px; pointer-events: none; }
+.laybtns { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 10px; }
+.laybtns .go { width: auto; margin: 0; padding: 10px 22px; font-size: 18px; }
+</style>
+
+<div id="game">
+  <canvas id="c"></canvas>
+
+  <div class="hud" id="hud" hidden>
+    <div class="pill"><span class="lbl">Очки</span><b id="score">0</b></div>
+    <button class="btn-sm" id="setBtn" type="button">Настройки</button>
+    <div class="pill time" id="timeP"><span class="lbl">Время</span><b id="time">60</b></div>
+  </div>
+  <div class="tally" id="tally" hidden><span class="s">Газява <b id="nS">0</b></span> · <span class="c">Хрумки <b id="nC">0</b></span> · <span class="m">Лавэха <b id="nM">0</b></span></div>
+  <div class="combo" id="combo" hidden><span id="comboT">Комбо x2</span><i><u id="comboBar"></u></i></div>
+
+  <button class="moto-btn" id="motoBtn" type="button" aria-keyshortcuts="M Space" hidden><span id="motoT">Мотик</span><span id="motoC"><span class="coin"></span> <b id="motoCost">20</b></span><kbd id="motoKey" aria-hidden="true">M / Пробел</kbd></button>
+
+  <div class="stick" id="stick" hidden><div class="knob" id="knob"></div></div>
+
+  <div class="ov sheet" id="shop" hidden>
+    <div class="card">
+      <div class="shophead"><h2>Магазин</h2><div class="wallet"><span class="coin"></span><b id="wallet">0</b></div></div>
+      <div class="tabs">
+        <button class="tab on" type="button" data-tab="skins">Скины</button>
+        <button class="tab" type="button" data-tab="motos">Мотики</button>
+        <button class="tab" type="button" data-tab="ups">Улучшения</button>
+      </div>
+      <div class="rows" id="shopList"></div>
+      <button class="go ghost" id="shopBack" type="button">Назад</button>
+    </div>
+  </div>
+
+  <div class="ov sheet" id="settings" hidden>
+    <div class="card">
+      <div class="shophead"><h2>Настройки</h2></div>
+      <div class="rows" id="setList"></div>
+      <button class="go ghost" id="setBack" type="button">Готово</button>
+    </div>
+  </div>
+
+  <div class="lay" id="layout" hidden>
+    <div class="laytip">Перетащи джойстик и кнопку мотика туда, где удобно</div>
+    <div class="stick on" id="lyStick"><div class="knob"></div></div>
+    <div class="moto-btn" id="lyMoto"><span>Мотик</span><span class="mc"><span class="coin"></span> <b>20</b></span></div>
+    <div class="laybtns"><button class="go ghost" id="layReset" type="button">Сбросить</button><button class="go" id="layDone" type="button">Готово</button></div>
+  </div>
+
+  <div class="ov" id="ov">
+    <div class="card">
+      <div id="intro">
+        <p class="eyebrow">Ларёк-забег</p>
+        <h1><em>Газява</em><br>и <strong>Хрумки</strong></h1>
+        <p>Хватай газировку и хрумки, лови комбо. Золотая банка даёт +5 очков, +3 секунды и 3 лавэхи. Лавэха тратится в магазине на скины, мотики и улучшения.</p>
+        <p class="sub"><span class="coin"></span> Лавэха: <b id="menuCoins">0</b></p>
+      </div>
+      <div id="res" hidden>
+        <p class="eyebrow">Время вышло</p>
+        <div class="big" id="rScore">0</div>
+        <p class="sub" id="rLine"></p>
+        <p class="sub" id="rBest"></p>
+        <p class="sub" id="rCoins"></p>
+        <p id="rText"></p>
+      </div>
+      <button class="go" id="go" type="button">Играть</button>
+      <button class="go alt" id="shopBtn" type="button">Магазин</button>
+      <button class="go ghost" id="setMenu" type="button">Настройки</button>
+    </div>
+  </div>
+</div>
+
+<script src="three.min.js"></script>
+<script>
+(function () {
+  var host = document.getElementById('game');
+  var $ = function (id) { return document.getElementById(id); };
+
+  if (typeof THREE === 'undefined') {
+    host.innerHTML = '<div class="err">Не удалось загрузить 3D-движок. Проверь интернет и обнови страницу.</div>';
+    return;
+  }
+  var renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true });
+  } catch (e) {
+    host.innerHTML = '<div class="err">Этот браузер не поддерживает WebGL, поэтому 3D не запустится. Попробуй Chrome или Safari.</div>';
+    return;
+  }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true;
+
+  /* ---------- scene ---------- */
+  var SKY = 0xffd8a8;
+  var R = 36; // arena radius
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(SKY);
+  scene.fog = new THREE.Fog(SKY, 46, 120);
+  var camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
+
+  scene.add(new THREE.HemisphereLight(0xfff1d6, 0x9a7bd0, 0.9));
+  var sun = new THREE.DirectionalLight(0xffffff, 0.8);
+  sun.position.set(12, 24, 8);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  var sc = sun.shadow.camera;
+  sc.left = -42; sc.right = 42; sc.top = 42; sc.bottom = -42; sc.near = 1; sc.far = 100;
+  scene.add(sun);
+
+  function tileTexture() {
+    var c = document.createElement('canvas');
+    c.width = c.height = 512;
+    var g = c.getContext('2d');
+    var n = 16, s = 512 / n;
+    for (var y = 0; y < n; y++) {
+      for (var x = 0; x < n; x++) {
+        g.fillStyle = (x + y) % 2 ? '#8fd3c8' : '#f6efe2';
+        g.fillRect(x * s, y * s, s, s);
+      }
+    }
+    var t = new THREE.CanvasTexture(c);
+    t.anisotropy = 4;
+    return t;
+  }
+  var floor = new THREE.Mesh(new THREE.CircleGeometry(R, 64), new THREE.MeshStandardMaterial({ map: tileTexture(), roughness: 0.9 }));
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  var ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({ color: 0xffb86b, roughness: 1 }));
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.08;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  var rim = new THREE.Mesh(new THREE.TorusGeometry(R + 0.3, 0.4, 12, 96), new THREE.MeshStandardMaterial({ color: 0xff3d5a, roughness: 0.6 }));
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = 0.2;
+  rim.castShadow = true;
+  scene.add(rim);
+
+  /* pillars = shelves you run around */
+  var obstacles = [];
+  var pillarColors = [0x1fb6ff, 0xffb703, 0xff3d5a, 0x7a5cff];
+  for (var i = 0; i < 14; i++) {
+    var ang = i * Math.PI * 2 / 14 + 0.3;
+    var rad = [10, 19, 28][i % 3];
+    var h = 2.4 + (i % 3) * 0.8;
+    var col = pillarColors[i % pillarColors.length];
+    var p = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, h, 24), new THREE.MeshStandardMaterial({ color: col, roughness: 0.55 }));
+    var px = Math.cos(ang) * rad, pz = Math.sin(ang) * rad;
+    p.position.set(px, h / 2, pz);
+    p.castShadow = true; p.receiveShadow = true;
+    scene.add(p);
+    var cap = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.35, 0.25, 24), new THREE.MeshStandardMaterial({ color: 0xfff4e0, roughness: 0.5 }));
+    cap.position.set(px, h + 0.12, pz);
+    cap.castShadow = true;
+    scene.add(cap);
+    obstacles.push({ x: px, z: pz, r: 1.35 });
+  }
+
+  /* ---------- items ---------- */
+  var matCache = {};
+  function mat(color, extra) {
+    var key = color + (extra ? JSON.stringify(extra) : '');
+    if (!matCache[key]) {
+      var o = { color: color, roughness: 0.4, metalness: 0.2 };
+      if (extra) { for (var k in extra) o[k] = extra[k]; }
+      matCache[key] = new THREE.MeshStandardMaterial(o);
+    }
+    return matCache[key];
+  }
+  var canGeo = new THREE.CylinderGeometry(0.34, 0.34, 1, 20);
+  var bandGeo = new THREE.CylinderGeometry(0.352, 0.352, 0.34, 20);
+  var topGeo = new THREE.CylinderGeometry(0.28, 0.34, 0.08, 20);
+  var bagGeo = new THREE.BoxGeometry(0.85, 1.15, 0.3);
+  var crimpGeo = new THREE.BoxGeometry(0.85, 0.14, 0.36);
+  var labelGeo = new THREE.CircleGeometry(0.27, 20);
+  var dotGeo = new THREE.CircleGeometry(0.15, 16);
+  var metal = new THREE.MeshStandardMaterial({ color: 0xdfe6ee, metalness: 0.8, roughness: 0.3 });
+  var white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+
+  function makeCan(col, gold) {
+    var g = new THREE.Group();
+    var bodyMat = gold ? mat(0xffc400, { emissive: 0xcc8800, emissiveIntensity: 0.6, metalness: 0.8, roughness: 0.25 }) : mat(col, { metalness: 0.35, roughness: 0.35 });
+    g.add(new THREE.Mesh(canGeo, bodyMat));
+    g.add(new THREE.Mesh(bandGeo, gold ? mat(0xfff2a8, { emissive: 0xaa7700, emissiveIntensity: 0.4 }) : white));
+    var top = new THREE.Mesh(topGeo, metal); top.position.y = 0.53; g.add(top);
+    var bot = new THREE.Mesh(topGeo, metal); bot.position.y = -0.53; bot.rotation.x = Math.PI; g.add(bot);
+    return g;
+  }
+  function makeChips(col) {
+    var g = new THREE.Group();
+    g.add(new THREE.Mesh(bagGeo, mat(col, { roughness: 0.35, metalness: 0.3 })));
+    var darker = mat(col, { roughness: 0.6, metalness: 0.1, emissive: 0x220000, emissiveIntensity: 0.2 });
+    var t = new THREE.Mesh(crimpGeo, darker); t.position.y = 0.6; g.add(t);
+    var b = new THREE.Mesh(crimpGeo, darker); b.position.y = -0.6; g.add(b);
+    [1, -1].forEach(function (s) {
+      var l = new THREE.Mesh(labelGeo, white); l.position.z = 0.153 * s; if (s < 0) l.rotation.y = Math.PI; g.add(l);
+      var d = new THREE.Mesh(dotGeo, mat(0xffc233, { roughness: 0.7, metalness: 0 })); d.position.z = 0.156 * s; if (s < 0) d.rotation.y = Math.PI; g.add(d);
+    });
+    return g;
+  }
+  var sodaColors = [0xff3d5a, 0x1fb6ff, 0xff8a1f];
+  var chipColors = [0xffb703, 0x3ecf6a, 0xe8402f];
+
+  var items = [];
+  var NUM_ITEMS = 22;
+
+  var coinGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 24);
+  var coinRimGeo = new THREE.TorusGeometry(0.32, 0.035, 8, 24);
+  function makeCoin() {
+    var g = new THREE.Group();
+    var c = new THREE.Mesh(coinGeo, mat(0xffc400, { emissive: 0xcc8800, emissiveIntensity: 0.5, metalness: 0.8, roughness: 0.25 }));
+    c.rotation.x = Math.PI / 2;
+    g.add(c);
+    [1, -1].forEach(function (s) {
+      var r = new THREE.Mesh(coinRimGeo, mat(0xfff2a8, { emissive: 0xaa7700, emissiveIntensity: 0.4 }));
+      r.position.z = 0.055 * s;
+      g.add(r);
+    });
+    return g;
+  }
+
+  /* ---------- skins, upgrades, save ---------- */
+  var SKINS = [
+    { id: 'pink', name: 'Розовый', price: 0, color: 0xff6fa5, foot: 0xc2185b, perk: '' },
+    { id: 'mint', name: 'Мятный', price: 40, color: 0x5fd7b5, foot: 0x1f8f77, perk: '' },
+    { id: 'lemon', name: 'Лимон', price: 60, color: 0xffe14d, foot: 0xc9a400, perk: '' },
+    { id: 'sport', name: 'Спортик', price: 120, color: 0x3d8bff, foot: 0x1c4fb0, perk: 'Скорость +10%', acc: 'band', speed: 0.10 },
+    { id: 'robot', name: 'Робот', price: 180, color: 0xaab4c4, foot: 0x56607a, perk: 'Магнит: радиус +0.7', acc: 'antenna', magnet: 0.7, metal: true },
+    { id: 'ghost', name: 'Призрак', price: 200, color: 0xffffff, foot: 0xdfe6ee, perk: 'Время раунда +6 с', time: 6, ghost: true },
+    { id: 'gold', name: 'Золотой', price: 300, color: 0xffc400, foot: 0xb88600, perk: 'Лавэха +1, комбо +0.5 с', acc: 'crown', coin: 1, combo: 0.5, metal: true }
+  ];
+  var UPS = [
+    { id: 'speed', name: 'Скорость', base: 30, text: function (l) { return 'Скорость +' + (l * 6) + '%'; } },
+    { id: 'time', name: 'Время', base: 40, text: function (l) { return 'Раунд ' + (90 + l * 4) + ' с'; } },
+    { id: 'magnet', name: 'Магнит', base: 25, text: function (l) { return 'Радиус сбора ' + (1.3 + l * 0.35).toFixed(1); } },
+    { id: 'coins', name: 'Лавэховый дождь', base: 35, text: function (l) { return 'Лавэхи на арене: ' + (7 + l * 2); } },
+    { id: 'combo', name: 'Долгое комбо', base: 30, text: function (l) { return 'Окно комбо ' + (2.5 + l * 0.3).toFixed(1) + ' с'; } }
+  ];
+  var MOTOS = [
+    { id: 'red', name: 'Красный', price: 0, color: 0xff3d5a },
+    { id: 'blue', name: 'Синий', price: 30, color: 0x1fb6ff },
+    { id: 'mint', name: 'Мятный', price: 40, color: 0x3ed9a8 },
+    { id: 'black', name: 'Чёрный', price: 60, color: 0x23232f, glow: 0x660014 },
+    { id: 'neon', name: 'Неон', price: 100, color: 0x14e0ff, glow: 0x00c8ff },
+    { id: 'fire', name: 'Огонь', price: 130, color: 0xff7a1a, glow: 0xff4500 },
+    { id: 'gold', name: 'Золотой', price: 200, color: 0xffc400, metal: true }
+  ];
+  function motoById(id) {
+    for (var i = 0; i < MOTOS.length; i++) if (MOTOS[i].id === id) return MOTOS[i];
+    return null;
+  }
+  function skinById(id) {
+    for (var i = 0; i < SKINS.length; i++) if (SKINS[i].id === id) return SKINS[i];
+    return null;
+  }
+  var save = { coins: 0, owned: ['pink'], skin: 'pink', motos: ['red'], moto: 'red', up: { speed: 0, time: 0, magnet: 0, coins: 0, combo: 0 } };
+  (function () {
+    try {
+      var s = JSON.parse(localStorage.getItem('gazyava-save') || 'null');
+      if (!s) return;
+      save.coins = Math.max(0, parseInt(s.coins, 10) || 0);
+      if (Array.isArray(s.owned)) s.owned.forEach(function (id) { if (skinById(id) && save.owned.indexOf(id) < 0) save.owned.push(id); });
+      if (s.skin && save.owned.indexOf(s.skin) >= 0) save.skin = s.skin;
+      if (Array.isArray(s.motos)) s.motos.forEach(function (id) { if (motoById(id) && save.motos.indexOf(id) < 0) save.motos.push(id); });
+      if (s.moto && save.motos.indexOf(s.moto) >= 0) save.moto = s.moto;
+      if (s.up) Object.keys(save.up).forEach(function (k) { save.up[k] = Math.min(5, Math.max(0, parseInt(s.up[k], 10) || 0)); });
+    } catch (e) {}
+  })();
+  function persist() {
+    try { localStorage.setItem('gazyava-save', JSON.stringify(save)); } catch (e) {}
+  }
+  function refreshStats() {
+    var s = skinById(save.skin) || SKINS[0], u = save.up;
+    SPEED = 10 * (1 + 0.06 * u.speed + (s.speed || 0));
+    ROUND = 90 + 4 * u.time + (s.time || 0);
+    MAGNET = 1.3 + 0.35 * u.magnet + (s.magnet || 0);
+    COMBO_WINDOW = 2.5 + 0.3 * u.combo + (s.combo || 0);
+    COIN_VAL = 1 + (s.coin || 0);
+    COIN_TARGET = 7 + 2 * u.coins;
+  }
+
+  /* ---------- player ---------- */
+  var player = { x: 0, z: 0, vx: 0, vz: 0, face: 0, bobT: 0, squash: 0, group: new THREE.Group(), body: new THREE.Group() };
+  (function buildPlayer() {
+    var skin = new THREE.MeshStandardMaterial({ color: 0xff6fa5, roughness: 0.6, metalness: 0 });
+    player.skinMat = skin;
+    var b = new THREE.Mesh(new THREE.SphereGeometry(0.7, 24, 18), skin);
+    b.scale.set(1, 1.1, 1);
+    b.castShadow = true;
+    player.body.add(b);
+    var eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+    var pupilMat = new THREE.MeshBasicMaterial({ color: 0x2b1b4a });
+    [-1, 1].forEach(function (s) {
+      var e = new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 12), eyeMat); e.position.set(0.25 * s, 0.25, 0.58); player.body.add(e);
+      var pu = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8), pupilMat); pu.position.set(0.25 * s, 0.25, 0.73); player.body.add(pu);
+      var cheek = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), mat(0xff3d5a, { roughness: 0.8, metalness: 0 })); cheek.position.set(0.42 * s, -0.02, 0.5); cheek.scale.z = 0.5; player.body.add(cheek);
+    });
+    var mouth = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.035, 8, 14, Math.PI), pupilMat);
+    mouth.position.set(0, 0.0, 0.66); mouth.rotation.z = Math.PI;
+    player.body.add(mouth);
+    player.group.add(player.body);
+
+    /* accessories, shown per skin */
+    player.acc = {};
+    var band = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.065, 8, 28), mat(0xff3d5a, { roughness: 0.6, metalness: 0 }));
+    band.rotation.x = Math.PI / 2; band.position.y = 0.55;
+    player.acc.band = band;
+    var antenna = new THREE.Group();
+    var stem = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3, 8), mat(0x56607a, { roughness: 0.5, metalness: 0.5 }));
+    stem.position.y = 0.9;
+    var ball = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 10), mat(0xff3d5a, { emissive: 0xaa0020, emissiveIntensity: 0.6 }));
+    ball.position.y = 1.08;
+    antenna.add(stem); antenna.add(ball);
+    player.acc.antenna = antenna;
+    var crown = new THREE.Group();
+    var crownMat = mat(0xffe066, { emissive: 0xcc8800, emissiveIntensity: 0.5, metalness: 0.8, roughness: 0.25 });
+    var ring = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.3, 0.2, 14, 1, true), crownMat);
+    ring.material = crownMat.clone(); ring.material.side = THREE.DoubleSide;
+    ring.position.y = 0.85;
+    crown.add(ring);
+    for (var ci = 0; ci < 5; ci++) {
+      var a = ci / 5 * Math.PI * 2;
+      var tip = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.17, 6), crownMat);
+      tip.position.set(Math.cos(a) * 0.3, 1.02, Math.sin(a) * 0.3);
+      crown.add(tip);
+    }
+    player.acc.crown = crown;
+    for (var k in player.acc) { player.acc[k].visible = false; player.body.add(player.acc[k]); }
+    var footMat = new THREE.MeshStandardMaterial({ color: 0xc2185b, roughness: 0.7, metalness: 0 });
+    player.footMat = footMat;
+    player.feet = [];
+    [-1, 1].forEach(function (s) {
+      var f = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 10), footMat);
+      f.scale.set(1, 0.6, 1.3);
+      f.position.set(0.32 * s, 0.14, 0.1);
+      f.castShadow = true;
+      player.group.add(f);
+      player.feet.push(f);
+    });
+    scene.add(player.group);
+  })();
+
+  function applySkin(id) {
+    var s = skinById(id) || SKINS[0];
+    var m = player.skinMat;
+    m.color.setHex(s.color);
+    m.metalness = s.metal ? 0.8 : 0;
+    m.roughness = s.metal ? 0.3 : 0.6;
+    m.transparent = !!s.ghost;
+    m.opacity = s.ghost ? 0.72 : 1;
+    m.needsUpdate = true;
+    player.footMat.color.setHex(s.foot);
+    for (var k in player.acc) player.acc[k].visible = (k === s.acc);
+  }
+
+  /* ---------- motorcycle ---------- */
+  var motoMat = new THREE.MeshStandardMaterial({ color: 0xff3d5a, roughness: 0.35, metalness: 0.3 });
+  (function buildMoto() {
+    var dark = mat(0x2b2b3a, { roughness: 0.6, metalness: 0.3 });
+    var tire = mat(0x1a1a22, { roughness: 0.9, metalness: 0 });
+    var hub = mat(0xdfe6ee, { metalness: 0.8, roughness: 0.3 });
+    var g = new THREE.Group();
+    player.wheels = [];
+    [0.85, -0.85].forEach(function (z) {
+      var w = new THREE.Group();
+      var t = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.12, 10, 22), tire);
+      t.rotation.y = Math.PI / 2; w.add(t);
+      var h = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.14, 14), hub);
+      h.rotation.z = Math.PI / 2; w.add(h);
+      w.add(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.58, 0.05), hub));
+      w.add(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.05, 0.58), hub));
+      w.position.set(0, 0.46, z);
+      g.add(w); player.wheels.push(w);
+    });
+    function part(geo, m, x, y, z) { var p = new THREE.Mesh(geo, m); p.position.set(x, y, z); g.add(p); return p; }
+    part(new THREE.BoxGeometry(0.34, 0.3, 0.6), dark, 0, 0.66, 0);
+    part(new THREE.BoxGeometry(0.46, 0.3, 0.62), motoMat, 0, 1.0, 0.25);
+    part(new THREE.BoxGeometry(0.4, 0.26, 0.7), motoMat, 0, 0.92, -0.6);
+    part(new THREE.BoxGeometry(0.42, 0.1, 0.7), dark, 0, 1.12, -0.35);
+    part(new THREE.BoxGeometry(0.9, 0.07, 0.07), dark, 0, 1.4, 0.55);
+    part(new THREE.CylinderGeometry(0.04, 0.04, 0.97, 8), hub, 0, 0.93, 0.72).rotation.x = -0.26;
+    part(new THREE.SphereGeometry(0.12, 12, 10), mat(0xfff2a8, { emissive: 0xffd84a, emissiveIntensity: 0.9 }), 0, 1.2, 0.9);
+    part(new THREE.CylinderGeometry(0.05, 0.05, 0.8, 8), hub, 0.23, 0.5, -0.65).rotation.x = Math.PI / 2;
+    g.traverse(function (o) { if (o.isMesh) o.castShadow = true; });
+    g.visible = false;
+    player.moto = g;
+    player.group.add(g);
+  })();
+  function applyMotoSkin(id) {
+    var s = motoById(id) || MOTOS[0];
+    motoMat.color.setHex(s.color);
+    motoMat.emissive.setHex(s.glow || 0x000000);
+    motoMat.emissiveIntensity = s.glow ? 0.7 : 0;
+    motoMat.metalness = s.metal ? 0.85 : 0.3;
+    motoMat.roughness = s.metal ? 0.25 : 0.35;
+  }
+
+  /* ---------- particles ---------- */
+  var pGeo = new THREE.IcosahedronGeometry(0.12, 0);
+  var pMats = {};
+  var parts = [];
+  function burst(x, y, z, cols, n) {
+    for (var i = 0; i < n; i++) {
+      var c = cols[i % cols.length];
+      if (!pMats[c]) pMats[c] = new THREE.MeshBasicMaterial({ color: c });
+      var m = new THREE.Mesh(pGeo, pMats[c]);
+      m.position.set(x, y, z);
+      var a = Math.random() * Math.PI * 2, s = 2 + Math.random() * 3;
+      parts.push({ m: m, vx: Math.cos(a) * s, vy: 3 + Math.random() * 3, vz: Math.sin(a) * s, life: 0.7 + Math.random() * 0.3 });
+      scene.add(m);
+    }
+  }
+
+  /* ---------- game state ---------- */
+  var state = 'menu';
+  var score = 0, timeLeft = 60, gt = 0, combo = 0, lastCollect = -99, nSoda = 0, nChips = 0;
+  var COMBO_WINDOW = 2.5, SPEED = 9, ROUND = 60, MAGNET = 1.3, COIN_VAL = 1, COIN_TARGET = 5, roundCoins = 0, MOTO_COST = 20, MOTO_TIME = 10, MOTO_MULT = 1.8, moto = { t: 0 };
+  var yaw = 0, animT = 0;
+  var motoFix = 0, MOTO_FIX = 12, inv = 0;
+  var camPos = new THREE.Vector3(0, 16, 30);
+  camera.position.copy(camPos);
+
+  function freeSpot(minDist) {
+    for (var t = 0; t < 50; t++) {
+      var a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * (R - 3);
+      var x = Math.cos(a) * r, z = Math.sin(a) * r;
+      var bad = false, j;
+      for (j = 0; j < obstacles.length; j++) if (Math.hypot(x - obstacles[j].x, z - obstacles[j].z) < obstacles[j].r + 1.3) { bad = true; break; }
+      if (bad) continue;
+      if (Math.hypot(x - player.x, z - player.z) < minDist) continue;
+      for (j = 0; j < items.length; j++) if (Math.hypot(x - items[j].x, z - items[j].z) < 2) { bad = true; break; }
+      if (bad) continue;
+      return { x: x, z: z };
+    }
+    return { x: (Math.random() - 0.5) * 20, z: 6 };
+  }
+  function spawnItem(forced, pos) {
+    var r = Math.random();
+    var type = forced || (r < 0.06 ? 'gold' : (r < 0.53 ? 'soda' : 'chips'));
+    var mesh, base = 1;
+    if (type === 'coin') mesh = makeCoin();
+    else if (type === 'soda') mesh = makeCan(sodaColors[Math.floor(Math.random() * sodaColors.length)]);
+    else if (type === 'chips') mesh = makeChips(chipColors[Math.floor(Math.random() * chipColors.length)]);
+    else {
+      mesh = makeCan(0, true); base = 1.35;
+      var ring = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.04, 8, 32), mat(0xfff2a8, { emissive: 0xffc400, emissiveIntensity: 0.8 }));
+      ring.rotation.x = Math.PI / 2; mesh.add(ring);
+    }
+    mesh.traverse(function (o) { if (o.isMesh) o.castShadow = true; });
+    var s = pos || freeSpot(3.5);
+    mesh.position.set(s.x, 1, s.z);
+    mesh.scale.setScalar(0.01);
+    scene.add(mesh);
+    items.push({ mesh: mesh, type: type, x: s.x, z: s.z, phase: Math.random() * 6.28, age: 0, base: base });
+  }
+  function clearItems() {
+    items.forEach(function (it) { scene.remove(it.mesh); });
+    items.length = 0;
+  }
+  function countKind(coin) {
+    var n = 0;
+    for (var i = 0; i < items.length; i++) if ((items[i].type === 'coin') === coin) n++;
+    return n;
+  }
+  function fillItems() {
+    while (countKind(false) < NUM_ITEMS) spawnItem();
+    while (countKind(true) < COIN_TARGET) spawnItem('coin');
+  }
+
+  /* ---------- sound ---------- */
+  var ac = null, soundOn = true;
+  function beep(f, d, type, v, slide) {
+    if (!ac || !soundOn) return;
+    try {
+      var o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+      o.type = type || 'square';
+      o.frequency.setValueAtTime(f, t);
+      if (slide) o.frequency.exponentialRampToValueAtTime(f * slide, t + d);
+      g.gain.setValueAtTime(v || 0.06, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(g); g.connect(ac.destination);
+      o.start(t); o.stop(t + d);
+    } catch (e) {}
+  }
+
+  /* ---------- HUD ---------- */
+  var elScore = $('score'), elTime = $('time'), elTimeP = $('timeP'), elNS = $('nS'), elNC = $('nC'), elNM = $('nM');
+  var elMoto = $('motoBtn'), elMotoT = $('motoT'), elMotoC = $('motoC');
+  var elCombo = $('combo'), elComboT = $('comboT'), elComboBar = $('comboBar');
+  var shown = { score: -1, time: -1, ns: -1, nc: -1, nm: -1, mb: '', ct: '' };
+  function hud() {
+    if (shown.score !== score) { elScore.textContent = score; shown.score = score; }
+    var tl = Math.max(0, Math.ceil(timeLeft));
+    if (shown.time !== tl) { elTime.textContent = tl; shown.time = tl; elTimeP.classList.toggle('low', tl <= 10 && state === 'play'); }
+    if (shown.ns !== nSoda) { elNS.textContent = nSoda; shown.ns = nSoda; }
+    if (shown.nc !== nChips) { elNC.textContent = nChips; shown.nc = nChips; }
+    if (shown.nm !== save.coins) { elNM.textContent = save.coins; shown.nm = save.coins; }
+    var mt = moto.t > 0 ? Math.ceil(moto.t) : 0;
+    var mkey = state !== 'play' ? 'x' : (mt > 0 ? 'r' + mt : (motoFix > 0 ? 'f' + Math.ceil(motoFix) : (save.coins >= MOTO_COST ? 'a' : 'd')));
+    if (shown.mb !== mkey) {
+      shown.mb = mkey;
+      elMoto.hidden = mkey === 'x';
+      elMoto.disabled = mkey === 'd' || mt > 0 || motoFix > 0;
+      elMoto.classList.toggle('run', mt > 0);
+      elMotoT.textContent = mt > 0 ? 'Едем ' + mt + ' с' : (motoFix > 0 ? 'Ремонт ' + Math.ceil(motoFix) + ' с' : 'Мотик');
+      elMotoC.hidden = mt > 0 || motoFix > 0;
+    }
+    var left = 1 - (gt - lastCollect) / COMBO_WINDOW;
+    if (state === 'play' && combo >= 2 && left > 0) {
+      var m = Math.min(5, 1 + Math.floor((combo - 1) / 3));
+      var txt = 'Комбо ' + combo + (m > 1 ? ' · x' + m : '');
+      if (shown.ct !== txt) { elComboT.textContent = txt; shown.ct = txt; }
+      elCombo.hidden = false;
+      elComboBar.style.width = (left * 100) + '%';
+    } else {
+      elCombo.hidden = true;
+    }
+  }
+  function popText(x, z, text, color) {
+    var v = new THREE.Vector3(x, 1.6, z).project(camera);
+    var w = host.clientWidth, h = host.clientHeight;
+    var d = document.createElement('div');
+    d.className = 'pop';
+    d.textContent = text;
+    d.style.color = color;
+    d.style.left = ((v.x * 0.5 + 0.5) * w) + 'px';
+    d.style.top = ((-v.y * 0.5 + 0.5) * h) + 'px';
+    host.appendChild(d);
+    setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 950);
+  }
+
+  /* ---------- collect ---------- */
+  function collect(idx) {
+    var it = items[idx];
+    if (it.type === 'coin') {
+      save.coins += COIN_VAL; roundCoins += COIN_VAL; persist();
+      burst(it.x, 1, it.z, [0xffc400, 0xfff2a8], 6);
+      popText(it.x, it.z, '+' + COIN_VAL, '#ffd84a');
+      beep(1040, 0.08, 'triangle', 0.05, 1.5);
+      scene.remove(it.mesh); items.splice(idx, 1); fillItems();
+      return;
+    }
+    if (gt - lastCollect < COMBO_WINDOW) combo++; else combo = 1;
+    lastCollect = gt;
+    var mult = Math.min(5, 1 + Math.floor((combo - 1) / 3));
+    var base = it.type === 'gold' ? 5 : 1;
+    var pts = base * mult;
+    score += pts;
+    if (it.type === 'soda') nSoda++; else if (it.type === 'chips') nChips++;
+    var color = '#ffb703', cols = [0xffb703, 0xffe08a, 0xff8a1f];
+    if (it.type === 'soda') { color = '#5fd0ff'; cols = [0x1fb6ff, 0xffffff, 0x9be4ff]; }
+    if (it.type === 'gold') { color = '#ffd84a'; cols = [0xffc400, 0xfff2a8, 0xffffff]; timeLeft += 3; save.coins += 3; roundCoins += 3; persist(); }
+    burst(it.x, 1, it.z, cols, it.type === 'gold' ? 26 : 14);
+    popText(it.x, it.z, '+' + pts + (it.type === 'gold' ? ' +3с' : ''), color);
+    player.squash = 1;
+    var f = 520 + Math.min(combo, 12) * 55;
+    if (it.type === 'gold') { beep(660, 0.12, 'triangle', 0.08); setTimeout(function () { beep(880, 0.12, 'triangle', 0.08); }, 90); setTimeout(function () { beep(1320, 0.2, 'triangle', 0.08); }, 180); }
+    else if (it.type === 'soda') { beep(f, 0.14, 'square', 0.05, 1.6); }
+    else { beep(f * 0.7, 0.1, 'sawtooth', 0.05, 1.4); }
+    scene.remove(it.mesh);
+    items.splice(idx, 1);
+    fillItems();
+  }
+
+  /* ---------- input ---------- */
+  var cfg = { sound: true, stickSide: 'left', stickSize: 1, motoSide: 'right', motoSize: 1, stickPos: null, motoPos: null };
+  try {
+    var cs = JSON.parse(localStorage.getItem('gazyava-settings') || 'null');
+    if (cs) for (var ck in cfg) if (cs[ck] !== undefined) cfg[ck] = cs[ck];
+  } catch (e) {}
+  cfg.sound = cfg.sound !== false;
+  cfg.stickSize = +cfg.stickSize || 1; cfg.motoSize = +cfg.motoSize || 1;
+  if (cfg.stickSide !== 'right') cfg.stickSide = 'left';
+  if (cfg.motoSide !== 'left') cfg.motoSide = 'right';
+  function okPos(p) { return p && isFinite(p.x) && isFinite(p.y) && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1 ? { x: +p.x, y: +p.y } : null; }
+  cfg.stickPos = okPos(cfg.stickPos); cfg.motoPos = okPos(cfg.motoPos);
+  soundOn = cfg.sound;
+  function saveCfg() { try { localStorage.setItem('gazyava-settings', JSON.stringify(cfg)); } catch (e) {} }
+  var keys = {};
+  var stick = { id: null, ox: 0, oy: 0, x: 0, y: 0 };
+  var cam = { id: null, lx: 0 };
+  var stickEl = $('stick'), knobEl = $('knob');
+  function stickCenter() {
+    var w = host.clientWidth, h = host.clientHeight;
+    if (cfg.stickPos) return { x: cfg.stickPos.x * w, y: cfg.stickPos.y * h };
+    var off = Math.max(60 + 45 * cfg.stickSize, w * 0.2);
+    return { x: cfg.stickSide === 'right' ? w - off : off, y: h - 60 - 45 * cfg.stickSize };
+  }
+  function motoCenter() {
+    var w = host.clientWidth, h = host.clientHeight, m = cfg.motoSize;
+    if (cfg.motoPos) return { x: cfg.motoPos.x * w, y: cfg.motoPos.y * h };
+    return { x: cfg.motoSide === 'left' ? 20 + 50 * m : w - 20 - 50 * m, y: h - 40 - 40 * m };
+  }
+  function stickIdle() {
+    var c = stickCenter();
+    stickEl.style.left = c.x + 'px'; stickEl.style.top = c.y + 'px';
+    knobEl.style.transform = 'translate(0,0)';
+  }
+  function applyUI() {
+    stickEl.style.setProperty('--ss', cfg.stickSize);
+    elMoto.style.setProperty('--ms', cfg.motoSize);
+    var mc = motoCenter();
+    elMoto.style.left = mc.x + 'px'; elMoto.style.top = mc.y + 'px';
+    if (stick.id === null) stickIdle();
+  }
+  function resetSticks() {
+    stick.id = null; stick.x = 0; stick.y = 0; cam.id = null;
+    stickEl.classList.remove('on');
+    stickIdle();
+  }
+  window.addEventListener('keydown', function (e) {
+    keys[e.code] = true;
+    if (e.code.indexOf('Arrow') === 0) e.preventDefault();
+    if (state === 'play' && (e.code === 'KeyM' || e.code === 'Space')) {
+      e.preventDefault();
+      if (!e.repeat && !e.ctrlKey && !e.altKey && !e.metaKey) startMoto();
+    }
+  });
+  window.addEventListener('keyup', function (e) { keys[e.code] = false; });
+  window.addEventListener('blur', function () { keys = {}; });
+  host.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+  host.addEventListener('pointerdown', function (e) {
+    if (state !== 'play') return;
+    if (e.target.closest && e.target.closest('button')) return;
+    var r = host.getBoundingClientRect();
+    var lx = e.clientX - r.left, ly = e.clientY - r.top;
+    var sc = stickCenter();
+    var inStick = cfg.stickPos ? Math.hypot(lx - sc.x, ly - sc.y) < 100 * cfg.stickSize : (cfg.stickSide === 'left' ? lx < r.width * 0.55 : lx > r.width * 0.45);
+    if (inStick && stick.id === null) {
+      var ox = cfg.stickPos ? sc.x : lx, oy = cfg.stickPos ? sc.y : ly;
+      stick.id = e.pointerId; stick.ox = ox; stick.oy = oy; stick.x = 0; stick.y = 0;
+      stickEl.style.left = ox + 'px'; stickEl.style.top = oy + 'px';
+      knobEl.style.transform = 'translate(0,0)';
+      stickEl.classList.add('on');
+      try { host.setPointerCapture(e.pointerId); } catch (err) {}
+    } else if (cam.id === null) {
+      cam.id = e.pointerId; cam.lx = lx;
+      try { host.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+  });
+  host.addEventListener('pointermove', function (e) {
+    var r = host.getBoundingClientRect();
+    var lx = e.clientX - r.left, ly = e.clientY - r.top;
+    if (e.pointerId === stick.id) {
+      var dx = lx - stick.ox, dy = ly - stick.oy, max = 50 * cfg.stickSize;
+      var d = Math.hypot(dx, dy);
+      if (d > max) { dx = dx / d * max; dy = dy / d * max; }
+      knobEl.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+      var nx = dx / max, ny = -dy / max;
+      var m = Math.hypot(nx, ny);
+      if (m < 0.12) { nx = 0; ny = 0; }
+      stick.x = nx; stick.y = ny;
+    } else if (e.pointerId === cam.id) {
+      yaw -= (lx - cam.lx) * 0.009;
+      cam.lx = lx;
+    }
+  });
+  function up(e) {
+    if (e.pointerId === stick.id) { stick.id = null; stick.x = 0; stick.y = 0; stickEl.classList.remove('on'); stickIdle(); }
+    if (e.pointerId === cam.id) cam.id = null;
+  }
+  host.addEventListener('pointerup', up);
+  host.addEventListener('pointercancel', up);
+
+  /* ---------- flow ---------- */
+  var ov = $('ov'), intro = $('intro'), res = $('res'), goBtn = $('go');
+  var best = 0;
+  try { best = parseInt(localStorage.getItem('gazyava-best') || '0', 10) || 0; } catch (e) {}
+
+  function startGame() {
+    if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (ac && ac.state === 'suspended') { try { ac.resume(); } catch (e) {} }
+    refreshStats(); applySkin(save.skin); roundCoins = 0; moto.t = 0;
+    score = 0; timeLeft = ROUND; gt = 0; combo = 0; lastCollect = -99; nSoda = 0; nChips = 0;
+    player.x = 0; player.z = 0; player.vx = 0; player.vz = 0;
+    clearItems(); fillItems();
+    motoFix = 0; inv = 0;
+    resetSticks();
+    state = 'play';
+    ov.hidden = true;
+    $('hud').hidden = false; $('tally').hidden = false; stickEl.hidden = false;
+    beep(440, 0.12, 'triangle', 0.07); setTimeout(function () { beep(660, 0.18, 'triangle', 0.07); }, 110);
+  }
+  function endGame() {
+    state = 'over';
+    timeLeft = 0; moto.t = 0; inv = 0;
+    resetSticks();
+    stickEl.hidden = true; elCombo.hidden = true; elTimeP.classList.remove('low');
+    var isBest = score > best;
+    if (isBest) { best = score; try { localStorage.setItem('gazyava-best', String(best)); } catch (e) {} }
+    $('rScore').textContent = score;
+    var bonus = Math.floor(score / 10);
+    save.coins += bonus; persist();
+    $('rCoins').textContent = 'Лавэха: +' + roundCoins + (bonus ? ' и +' + bonus + ' за очки' : '');
+    refreshMenuCoins();
+    $('rLine').textContent = 'Газява: ' + nSoda + ' · Хрумки: ' + nChips;
+    $('rBest').textContent = isBest ? 'Новый рекорд!' : 'Рекорд: ' + best;
+    var txt = score < 15 ? 'Разминка. В ларьке ещё полно всего.' : score < 35 ? 'Неплохо. Хрумки на вечер обеспечены.' : score < 60 ? 'Газява рекой. Сильный забег.' : 'Легенда ларька. Продавец в шоке.';
+    $('rText').textContent = txt;
+    intro.hidden = true; res.hidden = false;
+    goBtn.textContent = 'Ещё раз';
+    ov.hidden = false;
+    beep(300, 0.4, 'sawtooth', 0.06, 0.5);
+  }
+  goBtn.addEventListener('click', startGame);
+
+  /* ---------- shop ---------- */
+  var shopEl = $('shop'), shopList = $('shopList'), shopTab = 'skins', preview = null, motoPreview = null, shopFrom = 'menu';
+  function initAudio() {
+    if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (ac && ac.state === 'suspended') { try { ac.resume(); } catch (e) {} }
+  }
+  function hexCss(c) { return '#' + ('000000' + c.toString(16)).slice(-6); }
+  function refreshMenuCoins() {
+    $('menuCoins').textContent = save.coins;
+    $('wallet').textContent = save.coins;
+  }
+  function renderShop() {
+    var html = '', i;
+    if (shopTab === 'skins') {
+      for (i = 0; i < SKINS.length; i++) {
+        var s = SKINS[i];
+        var owned = save.owned.indexOf(s.id) >= 0, eq = save.skin === s.id, btn;
+        if (eq) btn = '<button class="rbtn eq" type="button" disabled>Выбран</button>';
+        else if (owned) btn = '<button class="rbtn" type="button" data-act="equip" data-id="' + s.id + '">Выбрать</button>';
+        else btn = '<button class="rbtn" type="button" data-act="buy" data-id="' + s.id + '"' + (save.coins < s.price ? ' disabled' : '') + '>' + s.price + ' <span class="coin"></span></button>';
+        html += '<div class="row' + (preview === s.id ? ' sel' : '') + '" data-act="preview" data-id="' + s.id + '">' +
+          '<span class="sw" style="background:' + hexCss(s.color) + '"></span>' +
+          '<div class="rinfo"><div class="rname">' + s.name + '</div><div class="rdesc">' + (s.perk ? '<span class="perk">' + s.perk + '</span>' : 'Без бонуса') + '</div></div>' + btn + '</div>';
+      }
+    } else if (shopTab === 'motos') {
+      for (i = 0; i < MOTOS.length; i++) {
+        var mo = MOTOS[i];
+        var mown = save.motos.indexOf(mo.id) >= 0, meq = save.moto === mo.id, mbtn;
+        if (meq) mbtn = '<button class="rbtn eq" type="button" disabled>Выбран</button>';
+        else if (mown) mbtn = '<button class="rbtn" type="button" data-act="mequip" data-id="' + mo.id + '">Выбрать</button>';
+        else mbtn = '<button class="rbtn" type="button" data-act="mbuy" data-id="' + mo.id + '"' + (save.coins < mo.price ? ' disabled' : '') + '>' + mo.price + ' <span class="coin"></span></button>';
+        html += '<div class="row' + (motoPreview === mo.id ? ' sel' : '') + '" data-act="mpreview" data-id="' + mo.id + '">' +
+          '<span class="sw" style="background:' + hexCss(mo.color) + '"></span>' +
+          '<div class="rinfo"><div class="rname">' + mo.name + '</div><div class="rdesc">Только внешний вид</div></div>' + mbtn + '</div>';
+      }
+    } else {
+      for (i = 0; i < UPS.length; i++) {
+        var u = UPS[i], l = save.up[u.id], pips = '', k;
+        for (k = 0; k < 5; k++) pips += '<i' + (k < l ? ' class="on"' : '') + '></i>';
+        var cost = u.base * (l + 1);
+        var ub = l >= 5 ? '<button class="rbtn eq" type="button" disabled>Макс</button>' :
+          '<button class="rbtn" type="button" data-act="up" data-id="' + u.id + '"' + (save.coins < cost ? ' disabled' : '') + '>' + cost + ' <span class="coin"></span></button>';
+        html += '<div class="row"><div class="rinfo"><div class="rname">' + u.name + '</div><div class="rdesc">' + u.text(l) + '</div><div class="pips">' + pips + '</div></div>' + ub + '</div>';
+      }
+    }
+    shopList.innerHTML = html;
+    var tabs = shopEl.querySelectorAll('.tab');
+    for (i = 0; i < tabs.length; i++) tabs[i].classList.toggle('on', tabs[i].getAttribute('data-tab') === shopTab);
+  }
+  function openShop() {
+    initAudio();
+    shopFrom = state;
+    state = 'shop';
+    ov.hidden = true; shopEl.hidden = false;
+    player.x = 0; player.z = 0; player.vx = 0; player.vz = 0;
+    preview = save.skin; motoPreview = save.moto;
+    refreshMenuCoins(); renderShop();
+  }
+  function closeShop() {
+    applySkin(save.skin);
+    applyMotoSkin(save.moto);
+    shopEl.hidden = true; ov.hidden = false;
+    state = shopFrom;
+    refreshStats(); refreshMenuCoins();
+  }
+  shopList.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-act]');
+    if (!t) return;
+    initAudio();
+    var act = t.getAttribute('data-act'), id = t.getAttribute('data-id');
+    if (act === 'preview') {
+      preview = id; applySkin(id);
+    } else if (act === 'equip') {
+      save.skin = id; preview = id; applySkin(id); persist();
+      beep(600, 0.08, 'triangle', 0.05);
+    } else if (act === 'buy') {
+      var s = skinById(id);
+      if (s && save.coins >= s.price && save.owned.indexOf(id) < 0) {
+        save.coins -= s.price; save.owned.push(id); save.skin = id; preview = id;
+        applySkin(id); persist();
+        beep(660, 0.1, 'triangle', 0.07); setTimeout(function () { beep(990, 0.16, 'triangle', 0.07); }, 90);
+      }
+    } else if (act === 'mpreview') {
+      motoPreview = id; applyMotoSkin(id);
+    } else if (act === 'mequip') {
+      save.moto = id; motoPreview = id; applyMotoSkin(id); persist();
+      beep(600, 0.08, 'triangle', 0.05);
+    } else if (act === 'mbuy') {
+      var ms = motoById(id);
+      if (ms && save.coins >= ms.price && save.motos.indexOf(id) < 0) {
+        save.coins -= ms.price; save.motos.push(id); save.moto = id; motoPreview = id;
+        applyMotoSkin(id); persist();
+        beep(660, 0.1, 'triangle', 0.07); setTimeout(function () { beep(990, 0.16, 'triangle', 0.07); }, 90);
+      }
+    } else if (act === 'up') {
+      var u = null, j;
+      for (j = 0; j < UPS.length; j++) if (UPS[j].id === id) u = UPS[j];
+      var l = u ? save.up[id] : 5;
+      if (u && l < 5 && save.coins >= u.base * (l + 1)) {
+        save.coins -= u.base * (l + 1); save.up[id] = l + 1; persist();
+        beep(520, 0.08, 'square', 0.04, 1.5); setTimeout(function () { beep(780, 0.12, 'square', 0.04, 1.3); }, 80);
+      }
+    }
+    refreshStats(); refreshMenuCoins(); renderShop();
+  });
+  shopEl.addEventListener('click', function (e) {
+    var tb = e.target.closest('.tab');
+    if (tb) { shopTab = tb.getAttribute('data-tab'); renderShop(); }
+  });
+  $('shopBtn').addEventListener('click', openShop);
+  $('shopBack').addEventListener('click', closeShop);
+
+  function startMoto() {
+    if (state !== 'play' || moto.t > 0 || motoFix > 0 || save.coins < MOTO_COST) return;
+    save.coins -= MOTO_COST; persist();
+    moto.t = MOTO_TIME;
+    spawnCrowd();
+    burst(player.x, 0.6, player.z, [0xffffff, 0xffb703, 0xff8a1f], 16);
+    beep(120, 0.35, 'sawtooth', 0.08, 2.5);
+  }
+  elMoto.addEventListener('click', startMoto);
+  /* ---------- settings ---------- */
+  var setEl = $('settings'), setList = $('setList'), setFrom = 'menu';
+  var SET_OPTS = [
+    { k: 'sound', name: 'Звук', o: [[true, 'Вкл'], [false, 'Выкл']] },
+    { k: 'stickSize', name: 'Джойстик: размер', o: [[0.8, 'Малый'], [1, 'Средний'], [1.3, 'Большой']] },
+    { k: 'motoSize', name: 'Кнопка мотика: размер', o: [[0.8, 'Малая'], [1, 'Средняя'], [1.3, 'Большая']] }
+  ];
+  function renderSettings() {
+    var h = '';
+    SET_OPTS.forEach(function (st) {
+      h += '<div class="srow"><div class="rname">' + st.name + '</div><div class="opts">';
+      st.o.forEach(function (o, i) {
+        h += '<button class="rbtn' + (cfg[st.k] === o[0] ? ' eq' : '') + '" type="button" data-k="' + st.k + '" data-i="' + i + '">' + o[1] + '</button>';
+      });
+      h += '</div></div>';
+    });
+    h += '<div class="srow"><div class="rname">Расположение кнопок</div><div class="opts"><button class="rbtn" type="button" data-lay="edit">Перетащить</button><button class="rbtn" type="button" data-lay="reset">Сбросить</button></div>' +
+      '<div class="rdesc">Если подвинул джойстик, он закрепляется на месте и не появляется под пальцем.</div></div>';
+    setList.innerHTML = h;
+  }
+  setList.addEventListener('click', function (e) {
+    var lb = e.target.closest('[data-lay]');
+    if (lb) {
+      initAudio();
+      if (lb.getAttribute('data-lay') === 'edit') openLayout();
+      else { cfg.stickPos = null; cfg.motoPos = null; saveCfg(); applyUI(); beep(600, 0.06, 'triangle', 0.05); }
+      return;
+    }
+    var b = e.target.closest('[data-k]');
+    if (!b) return;
+    initAudio();
+    var k = b.getAttribute('data-k');
+    var st = SET_OPTS.filter(function (x) { return x.k === k; })[0];
+    cfg[k] = st.o[+b.getAttribute('data-i')][0];
+    soundOn = cfg.sound; saveCfg(); applyUI(); renderSettings();
+    beep(600, 0.06, 'triangle', 0.05);
+  });
+  function openSettings() {
+    initAudio();
+    setFrom = state;
+    if (state === 'play') { state = 'pause'; resetSticks(); }
+    ov.hidden = true; setEl.hidden = false; renderSettings();
+  }
+  function closeSettings() {
+    setEl.hidden = true;
+    if (setFrom === 'play') state = 'play'; else ov.hidden = false;
+  }
+  $('setBtn').addEventListener('click', openSettings);
+  $('setMenu').addEventListener('click', openSettings);
+  $('setBack').addEventListener('click', closeSettings);
+
+  /* ---------- drag layout ---------- */
+  var layEl = $('layout'), lyStick = $('lyStick'), lyMoto = $('lyMoto');
+  function placeGhosts() {
+    var sc = stickCenter(), mc = motoCenter();
+    lyStick.style.setProperty('--ss', cfg.stickSize); lyMoto.style.setProperty('--ms', cfg.motoSize);
+    lyStick.style.left = sc.x + 'px'; lyStick.style.top = sc.y + 'px';
+    lyMoto.style.left = mc.x + 'px'; lyMoto.style.top = mc.y + 'px';
+  }
+  function openLayout() { setEl.hidden = true; layEl.hidden = false; placeGhosts(); }
+  function closeLayout() { layEl.hidden = true; setEl.hidden = false; applyUI(); renderSettings(); }
+  function dragGhost(el, key) {
+    var drag = null;
+    el.addEventListener('pointerdown', function (e) {
+      drag = e.pointerId;
+      try { el.setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+    });
+    el.addEventListener('pointermove', function (e) {
+      if (e.pointerId !== drag) return;
+      var r = host.getBoundingClientRect();
+      var x = Math.max(45, Math.min(r.width - 45, e.clientX - r.left));
+      var y = Math.max(45, Math.min(r.height - 45, e.clientY - r.top));
+      el.style.left = x + 'px'; el.style.top = y + 'px';
+      cfg[key] = { x: x / r.width, y: y / r.height };
+    });
+    function end(e) { if (e.pointerId === drag) { drag = null; saveCfg(); } }
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+  }
+  dragGhost(lyStick, 'stickPos');
+  dragGhost(lyMoto, 'motoPos');
+  $('layDone').addEventListener('click', closeLayout);
+  $('layReset').addEventListener('click', function () { cfg.stickPos = null; cfg.motoPos = null; saveCfg(); placeGhosts(); });
+
+  /* ---------- nefors ---------- */
+  var crowd = new THREE.Group();
+  crowd.visible = false;
+  scene.add(crowd);
+  var headGeo = new THREE.SphereGeometry(0.27, 14, 12), torsoGeo = new THREE.CylinderGeometry(0.3, 0.36, 0.75, 14), legGeo = new THREE.BoxGeometry(0.5, 0.55, 0.28);
+  var hairGeo = new THREE.ConeGeometry(0.1, 0.5, 6), hatGeo = new THREE.CylinderGeometry(0.2, 0.26, 0.45, 12);
+  var fringeGeo = new THREE.SphereGeometry(0.29, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), boardGeo = new THREE.BoxGeometry(0.7, 0.1, 1.9);
+  var nefShirts = [0x2b2b3a, 0x7a5cff, 0xff3d5a, 0x14e0ff, 0x3ecf6a], nefHair = [0xff3d5a, 0x1fb6ff, 0x3ecf6a, 0xb066ff];
+  function makeNefor(k) {
+    var g = new THREE.Group();
+    function part(geo, m, y) { var p = new THREE.Mesh(geo, m); p.position.y = y; p.castShadow = true; g.add(p); return p; }
+    part(legGeo, mat(0x1b1b26, { roughness: 0.8, metalness: 0 }), 0.3);
+    part(torsoGeo, mat(nefShirts[k % nefShirts.length], { roughness: 0.7, metalness: 0 }), 0.92);
+    part(headGeo, mat(0xf3c9a5, { roughness: 0.7, metalness: 0 }), 1.55);
+    var t = k % 3;
+    if (t === 0) part(hairGeo, mat(nefHair[k % nefHair.length], { roughness: 0.6, metalness: 0 }), 1.98);
+    else if (t === 1) part(hatGeo, mat(0x15151c, { roughness: 0.6, metalness: 0 }), 1.95);
+    else part(fringeGeo, mat(0x15151c, { roughness: 0.6, metalness: 0 }), 1.58).rotation.x = 0.35;
+    return g;
+  }
+  var walkers = [], sliders = [], lineObjs = [], NW = 6, NS = 3, NL = 3, q;
+  for (q = 0; q < NW; q++) {
+    var wg = makeNefor(q); crowd.add(wg);
+    walkers.push({ g: wg, x: 0, z: 0, tx: 0, tz: 0, tt: 0, fall: 0, respawn: 0, kx: 0, kz: 0, ph: q });
+  }
+  for (q = 0; q < NS; q++) {
+    var sg = makeNefor(q + 2), sw = new THREE.Group();
+    var bd = new THREE.Mesh(boardGeo, mat([0xffb703, 0x1fb6ff, 0xff3d5a][q % 3], { roughness: 0.5 })); bd.position.y = 0.05; bd.castShadow = true;
+    sg.position.y = 0.1; sw.add(bd); sw.add(sg); crowd.add(sw);
+    sliders.push({ g: sw, x: 0, z: 0, dx: 0, dz: 1, st: 0, t: 0 });
+  }
+  function crowdSpot(minD) {
+    for (var t = 0; t < 40; t++) {
+      var a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * (R - 4);
+      var x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (Math.hypot(x - player.x, z - player.z) < minD) continue;
+      var ok = true;
+      for (var j = 0; j < obstacles.length; j++) if (Math.hypot(x - obstacles[j].x, z - obstacles[j].z) < obstacles[j].r + 1.2) { ok = false; break; }
+      if (ok) return { x: x, z: z };
+    }
+    return { x: R - 6, z: 0 };
+  }
+  function segDist(px, pz, a, b) {
+    var dx = b.x - a.x, dz = b.z - a.z, l2 = dx * dx + dz * dz;
+    var t = l2 ? ((px - a.x) * dx + (pz - a.z) * dz) / l2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (a.x + dx * t), pz - (a.z + dz * t));
+  }
+  function buildLines() {
+    var oldMaterials = new Set();
+    lineObjs.forEach(function (l) {
+      l.g.traverse(function (obj) { if (obj.isMesh) oldMaterials.add(obj.material); });
+      l.g.children[0].geometry.dispose();
+      crowd.remove(l.g);
+    });
+    oldMaterials.forEach(function (material) { material.dispose(); });
+    lineObjs.length = 0;
+    var lineMat = mat(0xfff4e0, { emissive: 0xff3d5a, emissiveIntensity: 0.9, roughness: 0.5, metalness: 0 });
+    for (var n = 0; n < NL; n++) {
+      var a = null, b = null;
+      for (var t = 0; t < 40 && !a; t++) {
+        var c = crowdSpot(8), th = Math.random() * Math.PI, len = 9 + Math.random() * 4;
+        var pa = { x: c.x - Math.cos(th) * len / 2, z: c.z - Math.sin(th) * len / 2 }, pb = { x: c.x + Math.cos(th) * len / 2, z: c.z + Math.sin(th) * len / 2 };
+        if (Math.hypot(pa.x, pa.z) > R - 2 || Math.hypot(pb.x, pb.z) > R - 2) continue;
+        var ok = true;
+        for (var j = 0; j < obstacles.length; j++) if (segDist(obstacles[j].x, obstacles[j].z, pa, pb) < obstacles[j].r + 0.5) { ok = false; break; }
+        if (ok && segDist(player.x, player.z, pa, pb) >= 8) { a = pa; b = pb; }
+      }
+      if (!a) continue;
+      var g = new THREE.Group();
+      var L = Math.hypot(b.x - a.x, b.z - a.z);
+      var ln = new THREE.Mesh(new THREE.BoxGeometry(L, 0.06, 0.06), lineMat);
+      ln.position.set((a.x + b.x) / 2, 0.55, (a.z + b.z) / 2);
+      ln.rotation.y = -Math.atan2(b.z - a.z, b.x - a.x);
+      g.add(ln);
+      var p1 = makeNefor(n + 1), p2 = makeNefor(n + 4);
+      p1.position.set(a.x, 0, a.z); p1.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
+      p2.position.set(b.x, 0, b.z); p2.rotation.y = Math.atan2(a.x - b.x, a.z - b.z);
+      g.add(p1); g.add(p2);
+      crowd.add(g);
+      lineObjs.push({ a: a, b: b, g: g });
+    }
+  }
+  function spawnCrowd() {
+    walkers.forEach(function (w) {
+      var sp = crowdSpot(9);
+      w.x = sp.x; w.z = sp.z; w.tx = sp.x; w.tz = sp.z; w.tt = 0; w.fall = 0; w.respawn = 0;
+      w.g.visible = true; w.g.rotation.set(0, 0, 0);
+      w.g.position.set(w.x, 0, w.z);
+    });
+    sliders.forEach(function (sl) { sl.st = 0; sl.t = 3 + Math.random() * 4; sl.g.visible = false; });
+    buildLines();
+  }
+  function dropItems(type, n, cx, cz) {
+    for (var i = 0; i < n; i++) {
+      var x = cx, z = cz;
+      for (var t = 0; t < 8; t++) {
+        var a = Math.random() * Math.PI * 2, d = 1.8 + Math.random() * 1.6;
+        x = cx + Math.cos(a) * d; z = cz + Math.sin(a) * d;
+        var dc = Math.hypot(x, z);
+        if (dc > R - 1.5) { x *= (R - 1.5) / dc; z *= (R - 1.5) / dc; }
+        var bad = false;
+        for (var j = 0; j < obstacles.length; j++) if (Math.hypot(x - obstacles[j].x, z - obstacles[j].z) < obstacles[j].r + 0.8) { bad = true; break; }
+        if (!bad) break;
+      }
+      spawnItem(type, { x: x, z: z });
+    }
+  }
+  function crowdMove(dt) {
+    walkers.forEach(function (w) {
+      if (w.fall > 0) {
+        w.fall -= dt;
+        var p = 1 - Math.max(0, w.fall) / 0.9;
+        w.x += w.kx * dt; w.z += w.kz * dt;
+        w.g.position.set(w.x, Math.sin(p * Math.PI) * 1.3, w.z);
+        w.g.rotation.x = p * 2.6;
+        if (w.fall <= 0) { w.g.visible = false; w.respawn = 5 + Math.random() * 3; }
+        return;
+      }
+      if (w.respawn > 0) {
+        w.respawn -= dt;
+        if (w.respawn > 0) return;
+        var sp = crowdSpot(10);
+        w.x = sp.x; w.z = sp.z; w.tt = 0; w.g.rotation.set(0, 0, 0); w.g.visible = true;
+      }
+      w.tt -= dt;
+      var dx = w.tx - w.x, dz = w.tz - w.z, d = Math.hypot(dx, dz);
+      if (w.tt <= 0 || d < 0.6) { var t2 = crowdSpot(0); w.tx = t2.x; w.tz = t2.z; w.tt = 5 + Math.random() * 4; }
+      else {
+        w.x += dx / d * 2.2 * dt; w.z += dz / d * 2.2 * dt;
+        w.g.rotation.y = angleLerp(w.g.rotation.y, Math.atan2(dx, dz), 1 - Math.exp(-8 * dt));
+      }
+      for (var i = 0; i < obstacles.length; i++) {
+        var o = obstacles[i], ox = w.x - o.x, oz = w.z - o.z, od = Math.hypot(ox, oz), mn = o.r + 0.5;
+        if (od < mn && od > 0.0001) { w.x = o.x + ox / od * mn; w.z = o.z + oz / od * mn; }
+      }
+      w.ph += dt * 8;
+      w.g.position.set(w.x, Math.abs(Math.sin(w.ph)) * 0.08, w.z);
+    });
+    sliders.forEach(function (sl) {
+      if (sl.st === 0) {
+        sl.t -= dt;
+        if (sl.t > 0) return;
+        var a = Math.random() * Math.PI * 2;
+        sl.x = Math.cos(a) * (R - 1.5); sl.z = Math.sin(a) * (R - 1.5);
+        var tx = player.x + (Math.random() - 0.5) * 8, tz = player.z + (Math.random() - 0.5) * 8;
+        var dd = Math.hypot(tx - sl.x, tz - sl.z) || 1;
+        sl.dx = (tx - sl.x) / dd; sl.dz = (tz - sl.z) / dd;
+        sl.st = 1; sl.t = 1;
+        sl.g.position.set(sl.x, 0, sl.z); sl.g.rotation.y = Math.atan2(sl.dx, sl.dz);
+        sl.g.visible = true;
+        if (state === 'play') { popText(sl.x, sl.z, 'Слайдер!', '#ff6b81'); beep(300, 0.15, 'square', 0.05, 1.5); }
+      } else if (sl.st === 1) {
+        sl.t -= dt;
+        sl.g.visible = Math.floor(animT * 12) % 2 === 0;
+        if (sl.t <= 0) { sl.st = 2; sl.g.visible = true; }
+      } else {
+        sl.x += sl.dx * 15 * dt; sl.z += sl.dz * 15 * dt;
+        sl.g.position.set(sl.x, 0, sl.z);
+        if (Math.random() < 0.3) burst(sl.x, 0.2, sl.z, [0xffffff], 1);
+        var end = Math.hypot(sl.x, sl.z) > R - 0.2 && (sl.x * sl.dx + sl.z * sl.dz) > 0;
+        for (var i = 0; i < obstacles.length && !end; i++) if (Math.hypot(sl.x - obstacles[i].x, sl.z - obstacles[i].z) < obstacles[i].r + 0.6) { end = true; burst(sl.x, 0.8, sl.z, [0xffffff, 0xffb703], 8); }
+        if (end) { sl.st = 0; sl.t = 2.5 + Math.random() * 3; sl.g.visible = false; }
+      }
+    });
+  }
+  function knockNefor(w) {
+    var dx = w.x - player.x, dz = w.z - player.z, d = Math.hypot(dx, dz) || 1;
+    w.fall = 0.9; w.kx = dx / d * 9; w.kz = dz / d * 9;
+    var r = Math.random();
+    if (r < 0.34) dropItems('soda', 2 + (Math.random() < 0.4 ? 1 : 0), w.x, w.z);
+    else if (r < 0.68) dropItems('chips', 2 + (Math.random() < 0.4 ? 1 : 0), w.x, w.z);
+    else dropItems('coin', 3 + Math.floor(Math.random() * 3), w.x, w.z);
+    popText(w.x, w.z, 'Сбил!', '#ffd84a');
+    burst(w.x, 1, w.z, [0xffb703, 0xff3d5a, 0xffffff], 14);
+    beep(180, 0.2, 'square', 0.07, 0.6);
+    player.squash = 1;
+  }
+  function breakMoto() {
+    moto.t = 0; motoFix = MOTO_FIX; player.vx *= 0.2; player.vz *= 0.2;
+    burst(player.x, 0.8, player.z, [0xff8a1f, 0x56607a, 0xffffff], 18);
+    popText(player.x, player.z, 'Мотик сломан!', '#ff6b81');
+    beep(140, 0.45, 'sawtooth', 0.08, 0.4);
+  }
+  function hitBySlider(sl) {
+    inv = 2; combo = 0;
+    player.vx += sl.dx * 12; player.vz += sl.dz * 12;
+    burst(player.x, 1, player.z, [0xff3d5a, 0xffffff], 14);
+    beep(160, 0.3, 'sawtooth', 0.08, 0.5);
+    var opts = [];
+    if (save.coins > 0) opts.push('coin');
+    if (nSoda > 0) opts.push('soda');
+    if (nChips > 0) opts.push('chips');
+    if (!opts.length) { popText(player.x, player.z, 'Слайдер!', '#ff6b81'); return; }
+    var k = opts[Math.floor(Math.random() * opts.length)], n;
+    if (k === 'coin') { n = Math.min(save.coins, 3 + Math.floor(Math.random() * 4)); save.coins -= n; persist(); }
+    else if (k === 'soda') { n = Math.min(nSoda, 1 + Math.floor(Math.random() * 3)); nSoda -= n; score = Math.max(0, score - n); }
+    else { n = Math.min(nChips, 1 + Math.floor(Math.random() * 3)); nChips -= n; score = Math.max(0, score - n); }
+    popText(player.x, player.z, '-' + n + (k === 'coin' ? ' лавэхи' : k === 'soda' ? ' газявы' : ' хрумок'), '#ff6b81');
+    dropItems(k, n, player.x, player.z);
+  }
+  function crowdPlay(dt) {
+    var i;
+    motoFix = Math.max(0, motoFix - dt);
+    inv = Math.max(0, inv - dt);
+    if (moto.t > 0) {
+      for (i = 0; i < walkers.length; i++) {
+        var w = walkers[i];
+        if (w.fall <= 0 && w.respawn <= 0 && Math.hypot(player.x - w.x, player.z - w.z) < 1.3) knockNefor(w);
+      }
+      for (i = 0; i < lineObjs.length; i++) {
+        if (segDist(player.x, player.z, lineObjs[i].a, lineObjs[i].b) < 0.55) { breakMoto(); break; }
+      }
+    }
+    if (moto.t > 0 && inv <= 0) {
+      for (i = 0; i < sliders.length; i++) {
+        if (sliders[i].st === 2 && Math.hypot(player.x - sliders[i].x, player.z - sliders[i].z) < 1.25) { hitBySlider(sliders[i]); break; }
+      }
+    }
+  }
+
+  /* ---------- update loop ---------- */
+  function angleLerp(a, b, k) {
+    var d = Math.atan2(Math.sin(b - a), Math.cos(b - a));
+    return a + d * k;
+  }
+  function update(dt) {
+    animT += dt;
+    var i;
+    if (state === 'play') {
+      gt += dt;
+      timeLeft -= dt;
+      var ix = stick.x, iy = stick.y;
+      if (keys.KeyA || keys.ArrowLeft) ix -= 1;
+      if (keys.KeyD || keys.ArrowRight) ix += 1;
+      if (keys.KeyW || keys.ArrowUp) iy += 1;
+      if (keys.KeyS || keys.ArrowDown) iy -= 1;
+      if (keys.KeyQ) yaw += 1.8 * dt;
+      if (keys.KeyE) yaw -= 1.8 * dt;
+      var m = Math.hypot(ix, iy);
+      if (m > 1) { ix /= m; iy /= m; }
+      var fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+      var riding = moto.t > 0;
+      if (riding) {
+        moto.t -= dt;
+        if (moto.t <= 0) { moto.t = 0; burst(player.x, 0.6, player.z, [0xffffff, 0xcfd6e6], 12); beep(220, 0.25, 'sawtooth', 0.06, 0.5); }
+      }
+      var vmax = SPEED * (riding ? MOTO_MULT : 1);
+      var tx = (fx * iy + rx * ix) * vmax, tz = (fz * iy + rz * ix) * vmax;
+      var k = 1 - Math.exp(-(riding ? 7 : 12) * dt);
+      player.vx += (tx - player.vx) * k;
+      player.vz += (tz - player.vz) * k;
+      player.x += player.vx * dt;
+      player.z += player.vz * dt;
+      for (i = 0; i < obstacles.length; i++) {
+        var o = obstacles[i], dx = player.x - o.x, dz = player.z - o.z, d = Math.hypot(dx, dz), mn = o.r + 0.6;
+        if (d < mn && d > 0.0001) { player.x = o.x + dx / d * mn; player.z = o.z + dz / d * mn; }
+      }
+      var dc = Math.hypot(player.x, player.z), lim = R - 1.2;
+      if (dc > lim) { player.x *= lim / dc; player.z *= lim / dc; }
+
+      for (i = items.length - 1; i >= 0; i--) {
+        if (items[i].age > 0.25 && Math.hypot(player.x - items[i].x, player.z - items[i].z) < MAGNET + (moto.t > 0 ? 0.5 : 0)) collect(i);
+      }
+      crowdPlay(dt);
+      if (timeLeft <= 0) endGame();
+    }
+    crowd.visible = moto.t > 0 && (state === 'play' || state === 'pause');
+    if (crowd.visible && state === 'play') crowdMove(dt);
+
+    /* player visuals */
+    var speed = Math.hypot(player.vx, player.vz);
+    if (speed > 0.6) player.face = angleLerp(player.face, Math.atan2(player.vx, player.vz), 1 - Math.exp(-14 * dt));
+    if (state === 'shop') player.face += dt * 1.1;
+    player.bobT += dt * (3 + speed * 1.3);
+    var sp = Math.min(1, speed / SPEED);
+    player.squash = Math.max(0, player.squash - dt * 5);
+    var sq = Math.sin(player.squash * Math.PI) * 0.3;
+    player.group.position.set(player.x, 0, player.z);
+    player.group.rotation.y = player.face;
+    player.group.visible = inv <= 0 || Math.floor(animT * 14) % 2 === 0;
+    var motoVis = ((state === 'play' || state === 'pause') && moto.t > 0) || (state === 'shop' && shopTab === 'motos');
+    player.moto.visible = motoVis;
+    player.feet[0].visible = player.feet[1].visible = !motoVis;
+    if (motoVis) {
+      player.body.position.set(0, 1.5, -0.3);
+      player.body.rotation.x = 0.15 + sp * 0.25;
+      player.body.scale.set((1 + sq) * 0.8, (1 - sq) * 0.8, (1 + sq) * 0.8);
+      var wspin = state === 'shop' ? 2 : speed / 0.46;
+      for (var wi = 0; wi < player.wheels.length; wi++) player.wheels[wi].rotation.x += wspin * dt;
+    } else {
+      player.body.position.set(0, 0.82 + Math.abs(Math.sin(player.bobT)) * 0.2 * (0.3 + sp), 0);
+      player.body.rotation.x = sp * 0.22;
+      player.body.scale.set(1 + sq, 1 - sq, 1 + sq);
+      player.feet[0].position.z = 0.1 + Math.sin(player.bobT) * 0.28 * sp;
+      player.feet[1].position.z = 0.1 - Math.sin(player.bobT) * 0.28 * sp;
+    }
+
+    /* items */
+    for (i = 0; i < items.length; i++) {
+      var it = items[i];
+      it.age += dt;
+      it.mesh.visible = state !== 'shop';
+      var pop = Math.min(1, it.age / 0.3);
+      pop = 1 - Math.pow(1 - pop, 3);
+      it.mesh.scale.setScalar(Math.max(0.01, pop * it.base));
+      it.mesh.position.y = 1 + Math.sin(animT * 2.2 + it.phase) * 0.15;
+      it.mesh.rotation.y += dt * (it.type === 'gold' ? 3 : 1.8);
+      it.mesh.rotation.z = 0.2;
+    }
+
+    /* particles */
+    for (i = parts.length - 1; i >= 0; i--) {
+      var pt = parts[i];
+      pt.life -= dt;
+      if (pt.life <= 0) { scene.remove(pt.m); parts.splice(i, 1); continue; }
+      pt.vy -= 14 * dt;
+      pt.m.position.x += pt.vx * dt; pt.m.position.y += pt.vy * dt; pt.m.position.z += pt.vz * dt;
+      if (pt.m.position.y < 0.05) { pt.m.position.y = 0.05; pt.vy *= -0.4; }
+      pt.m.scale.setScalar(Math.max(0.01, Math.min(1, pt.life * 1.5)));
+    }
+
+    /* camera */
+    var portrait = camera.aspect < 1;
+    var tgtPos, look;
+    if (state === 'shop') {
+      tgtPos = new THREE.Vector3(Math.sin(yaw) * 5.2, 2.4, Math.cos(yaw) * 5.2);
+      look = new THREE.Vector3(0, -0.7, 0);
+    } else if (state === 'play' || state === 'pause') {
+      var mbst = moto.t > 0 ? 2.5 : 0;
+      var dist = (portrait ? 13 : 11) + mbst, ht = (portrait ? 12 : 9) + mbst * 0.6;
+      tgtPos = new THREE.Vector3(player.x + Math.sin(yaw) * dist, ht, player.z + Math.cos(yaw) * dist);
+      look = new THREE.Vector3(player.x, 0.8, player.z);
+    } else {
+      yaw += dt * 0.25;
+      var od = portrait ? 54 : 44;
+      tgtPos = new THREE.Vector3(Math.sin(yaw) * od, portrait ? 32 : 24, Math.cos(yaw) * od);
+      look = new THREE.Vector3(0, 0, 0);
+    }
+    camPos.lerp(tgtPos, 1 - Math.exp(-6 * dt));
+    camera.position.copy(camPos);
+    camera.lookAt(look);
+    hud();
+  }
+
+  function resize() {
+    var w = host.clientWidth, h = host.clientHeight;
+    if (!w || !h) return;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    applyUI();
+  }
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(host);
+  window.addEventListener('resize', resize);
+  resize();
+
+  refreshStats(); applySkin(save.skin); applyMotoSkin(save.moto); refreshMenuCoins();
+  applyUI();
+  fillItems();
+  var last = performance.now();
+  function frame(now) {
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    update(dt);
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  });
+}
+</script>
+</html>

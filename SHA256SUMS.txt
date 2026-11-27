@@ -1,0 +1,9 @@
+e7859cbfb46eae655ece6b1103ab5c55deb8b817a36ba24e6217561163bd48b0  Android/Gazyava-i-Hrumki.apk
+0dc69e308a8f04d2406cc9ccfc00cdd4a6e466f431890b1a8022ab471d5ee6e0  Linux/Gazyava-i-Hrumki-linux-arm64.tar.gz
+deaaf4fc26d6859151440145ec5c0bf0673f53273dbac25066864010902a6739  Linux/Gazyava-i-Hrumki-linux-armv7l.tar.gz
+44e045067ee5c5b26fafc7eae4b2e72c5b87a8a6344120cde5992d595662c785  Linux/Gazyava-i-Hrumki-linux-x64.tar.gz
+d6a5b79835af328ea5275543d29694da1334603ab9d6e528e6f93ea891a122b9  macOS/Gazyava-i-Hrumki-darwin-arm64.zip
+94bedf72776587e095adc51ac51ae750d83374bfe648f971ecee30a6e19280e1  macOS/Gazyava-i-Hrumki-darwin-x64.zip
+1925f358e7f0e9675a5ac4198fb076613f0db318da56d388799a97be74a5b19c  Windows/x64/Gazyava-i-Hrumki.exe
+e8edd3f41ef6ebf968cb17e5ca30d267e84386c922582d52b05c6491bc39d2f1  Windows/ia32/Gazyava-i-Hrumki.exe
+85fe6b93274854ccabd1e833c79bdbbba030db888915d1430f3cbbfe65f4daf4  Windows/arm64/Gazyava-i-Hrumki.exe
